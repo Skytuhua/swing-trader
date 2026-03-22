@@ -223,10 +223,16 @@ def _build_services(cfg: _Config) -> "Any":  # returns ServiceContainer
     fallback_data = YFinanceDataProvider()
 
     from src.services.market_data.manager import DataManager
+    # Pass the RedisManager instance itself (not redis._client, which is None
+    # until redis.init() is called during the startup sequence in _async_main).
+    # DataManager should call redis_manager.client lazily on first cache access,
+    # by which point init() will have completed.  Passing None here is safe:
+    # the _async_main startup sequence replaces services.redis with the
+    # already-initialised RedisManager after _build_services() returns.
     data_manager = DataManager(
         primary=primary_data,
         fallback=fallback_data,
-        redis_client=redis.client if hasattr(redis, "_client") else None,
+        redis_client=None,  # Replaced post-init via services.redis in _async_main
     )
 
     # ---- Technical analysis ----
@@ -575,6 +581,17 @@ async def _async_main(args: argparse.Namespace) -> int:
             services.redis = redis_mgr
         except Exception:
             pass
+        # Wire the initialised RedisManager into DataManager now that
+        # redis_mgr.init() has completed and redis_mgr._client is valid.
+        try:
+            if hasattr(services, "data_manager") and hasattr(redis_mgr, "_client"):
+                dm = services.data_manager
+                if hasattr(dm, "redis_client"):
+                    dm.redis_client = redis_mgr.client
+                elif hasattr(dm, "_redis"):
+                    dm._redis = redis_mgr.client
+        except Exception:
+            pass  # Non-fatal: DataManager operates without cache if Redis unavailable
         log.info("startup_services_ready")
     except Exception as exc:
         log.error("startup_services_init_error", error=str(exc), exc_info=True)

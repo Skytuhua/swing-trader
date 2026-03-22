@@ -68,3 +68,40 @@ class ExitReason(str, Enum):
     REGIME_DETERIORATION = "regime_deterioration"
     MANUAL = "manual"
     EMERGENCY = "emergency"
+
+
+class PositionStatus(str, Enum):
+    OPEN = "open"
+    CLOSING = "closing"
+    CLOSED = "closed"
+
+
+class CandidateStatus(str, Enum):
+    SCREENED = "screened"
+    SCORED = "scored"
+    RANKED = "ranked"
+    SELECTED = "selected"
+    REJECTED = "rejected"
+
+
+class SignalStrength(str, Enum):
+    STRONG = "strong"
+    MODERATE = "moderate"
+    WEAK = "weak"
+    NONE = "none"
+
+
+class AlertLevel(str, Enum):
+    DEBUG = "debug"
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
+    CRITICAL = "critical"
+
+
+class AlertCategory(str, Enum):
+    RISK = "risk"
+    EXECUTION = "execution"
+    DATA = "data"
+    SYSTEM = "system"
+    STRATEGY = "strategy"

@@ -32,3 +32,18 @@ class RiskLimitExceededError(SwingTraderError):
 
 class StaleDataError(SwingTraderError):
     pass
+
+
+class NoTradeError(SwingTraderError):
+    """Raised when conditions do not support opening a trade."""
+    pass
+
+
+class InsufficientLiquidityError(SwingTraderError):
+    """Raised when a stock does not meet liquidity requirements."""
+    pass
+
+
+class BacktestError(SwingTraderError):
+    """Raised for backtesting framework errors."""
+    pass

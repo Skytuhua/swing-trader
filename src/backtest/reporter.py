@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import math
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import numpy as np
@@ -90,7 +90,7 @@ class BacktestReporter:
         """Return result as a JSON-serializable dictionary."""
         r = self.result
         d: dict[str, Any] = {
-            "generated_at": datetime.utcnow().isoformat() + "Z",
+            "generated_at": datetime.now(tz=timezone.utc).isoformat(),
             "period": {"start": r.start_date, "end": r.end_date},
             "capital": {
                 "initial": r.initial_capital,
