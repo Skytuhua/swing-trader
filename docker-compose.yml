@@ -1,0 +1,158 @@
+# =============================================================================
+# SwingTrader — Docker Compose Stack
+# Services: app, postgres, redis
+# =============================================================================
+#
+# Usage:
+#   docker compose up -d           # Start all services
+#   docker compose logs -f app     # Follow bot logs
+#   docker compose down -v         # Stop and remove volumes
+#
+# All secrets come from the .env file (copy .env.example → .env first).
+# =============================================================================
+
+version: "3.9"
+
+# ---------------------------------------------------------------------------
+# Named volumes for persistent data
+# ---------------------------------------------------------------------------
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  app_logs:
+    driver: local
+  app_data:
+    driver: local
+
+# ---------------------------------------------------------------------------
+# Shared network
+# ---------------------------------------------------------------------------
+networks:
+  swing_net:
+    driver: bridge
+
+# ---------------------------------------------------------------------------
+# Services
+# ---------------------------------------------------------------------------
+services:
+
+  # --------------------------------------------------------------------------
+  # PostgreSQL 16 — primary persistent store
+  # --------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: swingtrader_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-swing}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-swing}
+      POSTGRES_DB: ${POSTGRES_DB:-swingtrader}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    networks:
+      - swing_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-swing} -d ${POSTGRES_DB:-swingtrader}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    # Tune Postgres for a trading workload (small-footprint defaults).
+    command: >
+      postgres
+        -c shared_buffers=256MB
+        -c work_mem=16MB
+        -c maintenance_work_mem=128MB
+        -c max_connections=50
+        -c wal_level=replica
+        -c checkpoint_completion_target=0.9
+        -c log_min_duration_statement=500
+
+  # --------------------------------------------------------------------------
+  # Redis 7 — caching, pub/sub, rate-limit counters
+  # --------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: swingtrader_redis
+    restart: unless-stopped
+    # Persistence: AOF for durability + RDB snapshot every 60 s if ≥1 key changed.
+    command: >
+      redis-server
+        --appendonly yes
+        --appendfsync everysec
+        --save 60 1
+        --maxmemory 512mb
+        --maxmemory-policy allkeys-lru
+        --loglevel notice
+    volumes:
+      - redis_data:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    networks:
+      - swing_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # --------------------------------------------------------------------------
+  # SwingTrader bot + FastAPI admin API
+  # --------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: swingtrader:latest
+    container_name: swingtrader_app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      # Override DB / Redis URLs to point at container names rather than localhost.
+      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-swing}:${POSTGRES_PASSWORD:-swing}@postgres:5432/${POSTGRES_DB:-swingtrader}"
+      REDIS_URL: "redis://redis:6379/0"
+    volumes:
+      - app_logs:/app/logs
+      - app_data:/app/data
+      # Mount config directory so you can adjust config without rebuilding.
+      - ./config:/app/config:ro
+    ports:
+      # FastAPI admin API
+      - "${API_PORT:-8000}:8000"
+      # Prometheus metrics
+      - "${METRICS_PORT:-9090}:9090"
+    networks:
+      - swing_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    # Resource limits — adjust for your host.
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+        reservations:
+          cpus: "0.5"
+          memory: 1G
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"

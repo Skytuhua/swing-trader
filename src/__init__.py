@@ -1,0 +1,1 @@
+# Swing Trader package

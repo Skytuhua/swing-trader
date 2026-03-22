@@ -1,0 +1,113 @@
+# =============================================================================
+# SwingTrader — Live Trading Overrides
+# =============================================================================
+#
+# This file is merged on top of default.yaml when TRADING_MODE=live.
+# Only values that differ from the defaults need to be listed here.
+#
+# ⚠️  WARNING: Live trading involves REAL MONEY.
+#     Review every parameter carefully before enabling live mode.
+#     Always paper-trade for at least 30 days and run a walk-forward
+#     backtest before switching to live.
+# =============================================================================
+
+mode: live
+
+# ---------------------------------------------------------------------------
+# Universe Filters — conservative for live to ensure execution quality
+# ---------------------------------------------------------------------------
+universe:
+  min_price: 20.0                   # Higher floor price for better liquidity
+  min_market_cap: 5_000_000_000     # $5 B minimum — S&P 500 mid/large cap
+  min_avg_dollar_volume: 20_000_000 # $20 M minimum daily dollar volume
+  max_spread_pct: 0.2               # Tighter spread limit (lower transaction cost)
+  min_atr_pct: 0.8                  # Require meaningful daily move potential
+
+# ---------------------------------------------------------------------------
+# Scoring — strict in live mode; only high-conviction setups trade
+# ---------------------------------------------------------------------------
+scoring:
+  weight_profile: conservative      # Heavy emphasis on regime + technical quality
+  no_trade_threshold: 65.0          # Must score ≥65 to qualify
+  confidence_threshold: 72.0        # High confidence bar
+  min_risk_reward: 2.0              # Minimum 2:1 reward-to-risk
+  top_n_candidates: 3               # Focus on the very best setups
+
+# ---------------------------------------------------------------------------
+# Risk — tighter controls for real capital
+# ---------------------------------------------------------------------------
+risk:
+  max_position_pct: 0.12            # Max 12 % of portfolio per position
+  max_risk_per_trade_pct: 1.0       # Risk at most 1 % per trade
+  max_total_risk_pct: 4.0           # Total open risk cap: 4 %
+  max_daily_loss_pct: 2.0           # Halt new entries after 2 % intra-day loss
+  max_drawdown_pct: 7.0             # Kill switch at 7 % peak-to-trough drawdown
+  max_open_positions: 4             # At most 4 concurrent open positions
+  max_entries_per_day: 2            # At most 2 new entries per day
+  min_cash_buffer_pct: 15.0         # Always hold ≥15 % cash
+  kill_switch_enabled: true
+  kill_switch_auto_reset: false     # Manual review required before reset
+  stale_data_threshold_seconds: 60  # Stricter staleness limit (60 s)
+  circuit_breaker_pct: 3.0          # Hard stop: exit everything at 3 % session loss
+
+# ---------------------------------------------------------------------------
+# Position — tighter controls, faster exits
+# ---------------------------------------------------------------------------
+position:
+  max_hold_days: 5                  # Strict 5-day maximum hold
+  stop_loss_atr_mult: 1.5           # Tighter initial stop (1.5 × ATR)
+  take_profit_atr_mult: 2.0         # Still target 2:1 R:R with tighter stop
+  trailing_stop_atr_mult: 1.0       # Aggressive trail to lock profits
+  partial_take_profit_fraction: 0.5 # Take half off at TP1
+  trailing_stop_enabled: true
+  news_shock_exit_threshold: -0.5   # Exit faster on negative news
+  thesis_deterioration_threshold: 40.0  # Exit sooner if thesis weakens
+  monitor_interval_minutes: 5       # Monitor every 5 minutes
+
+  # In live mode prefer limit orders to control entry cost.
+  entry_order_type: limit
+  entry_limit_offset_pct: 0.002     # Slightly wider offset in live
+  exit_order_type: market           # Market exit ensures fills on stops
+
+# ---------------------------------------------------------------------------
+# Data — use the paid Alpaca SIP feed in live mode
+# ---------------------------------------------------------------------------
+data:
+  bar_cache_ttl_seconds: 120        # Fresher cache in live
+  quote_cache_ttl_seconds: 10       # Quote cache shorter in live
+  quote_refresh_seconds: 15         # More frequent quote polling
+
+# ---------------------------------------------------------------------------
+# News — stricter news requirements in live mode
+# ---------------------------------------------------------------------------
+news:
+  max_age_hours: 24                 # Only recent news counts
+  min_positive_impact: 0.4          # Require strong positive catalyst
+  negative_exit_threshold: -0.5    # Exit sooner on bad news
+
+# ---------------------------------------------------------------------------
+# Sentiment — require more social evidence before acting
+# ---------------------------------------------------------------------------
+sentiment:
+  min_post_count: 10                # Need more posts for signal confidence
+  max_age_hours: 12                 # Only very recent social data
+
+# ---------------------------------------------------------------------------
+# Regime — block in ambiguous or bear regimes in live mode
+# ---------------------------------------------------------------------------
+regime:
+  block_in_bear_regime: true
+  allow_in_high_vol: false          # Never trade when VIX > high_vix_threshold
+
+# ---------------------------------------------------------------------------
+# API — disable auto-docs in production
+# ---------------------------------------------------------------------------
+api:
+  docs_enabled: false               # No /docs or /redoc in live mode
+
+# ---------------------------------------------------------------------------
+# Logging — structured JSON for log aggregation (Datadog, ELK, etc.)
+# ---------------------------------------------------------------------------
+logging:
+  level: INFO
+  format: json

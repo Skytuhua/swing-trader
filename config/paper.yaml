@@ -1,0 +1,72 @@
+# =============================================================================
+# SwingTrader — Paper Trading Overrides
+# =============================================================================
+#
+# This file is merged on top of default.yaml when TRADING_MODE=paper.
+# Only values that differ from the defaults need to be listed here.
+#
+# Purpose: slightly more conservative risk controls for paper trading,
+# where the goal is to validate logic before committing real capital.
+# =============================================================================
+
+mode: paper
+
+# ---------------------------------------------------------------------------
+# Universe Filters — slightly tighter to reduce noise during validation
+# ---------------------------------------------------------------------------
+universe:
+  min_price: 15.0                  # Raise minimum price for more liquid stocks
+  min_avg_dollar_volume: 10_000_000 # $10 M average daily dollar volume
+
+# ---------------------------------------------------------------------------
+# Scoring — use the conservative profile in paper mode
+# ---------------------------------------------------------------------------
+scoring:
+  weight_profile: conservative     # Higher confidence threshold
+  no_trade_threshold: 60.0         # Stricter gate vs 55 in default
+  confidence_threshold: 65.0
+  min_risk_reward: 2.0             # Require better setups
+  top_n_candidates: 3              # Fewer positions for simpler tracking
+
+# ---------------------------------------------------------------------------
+# Risk — more conservative limits for paper validation
+# ---------------------------------------------------------------------------
+risk:
+  max_position_pct: 0.15           # Max 15 % per position
+  max_risk_per_trade_pct: 1.5      # Risk at most 1.5 % per trade
+  max_total_risk_pct: 4.5          # Max 4.5 % total open risk
+  max_daily_loss_pct: 2.0          # Halt after 2 % intra-day loss
+  max_drawdown_pct: 8.0            # Kill switch at 8 % drawdown
+  max_open_positions: 3            # At most 3 concurrent positions
+  max_entries_per_day: 2           # At most 2 new entries per day
+  min_cash_buffer_pct: 10.0        # Keep 10 % cash always uninvested
+
+# ---------------------------------------------------------------------------
+# Position — tighter stops and faster exits to limit simulated losses
+# ---------------------------------------------------------------------------
+position:
+  max_hold_days: 5                 # Close by day 5 in paper mode
+  stop_loss_atr_mult: 1.5          # Tighter initial stop
+  take_profit_atr_mult: 1.5
+  trailing_stop_atr_mult: 1.0      # Very tight trailing stop
+  partial_take_profit_fraction: 0.5
+
+# ---------------------------------------------------------------------------
+# News — be more conservative with news catalysts
+# ---------------------------------------------------------------------------
+news:
+  min_positive_impact: 0.4         # Require stronger bullish catalyst
+  negative_exit_threshold: -0.5   # Exit sooner on negative news
+
+# ---------------------------------------------------------------------------
+# API — enable docs in paper mode for easier development
+# ---------------------------------------------------------------------------
+api:
+  docs_enabled: true
+
+# ---------------------------------------------------------------------------
+# Logging — verbose in paper mode for debugging
+# ---------------------------------------------------------------------------
+logging:
+  level: DEBUG
+  format: console                  # Human-readable for local testing

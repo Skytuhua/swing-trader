@@ -1,0 +1,430 @@
+# =============================================================================
+# SwingTrader — Default Configuration
+# =============================================================================
+#
+# This file defines sensible defaults for paper-trading.
+# Environment-specific overrides live in paper.yaml and live.yaml.
+#
+# All monetary values are expressed as ratios (0.0–1.0) or percentages,
+# not raw dollar amounts, so the config is equity-size agnostic.
+#
+# Config is loaded at startup via src/core/config.py and merged with
+# the appropriate environment overlay (paper.yaml or live.yaml).
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Global mode
+# ---------------------------------------------------------------------------
+mode: paper          # paper | live — overridden per environment
+
+# ---------------------------------------------------------------------------
+# Stock Universe Filters
+# ---------------------------------------------------------------------------
+# The universe pipeline filters the full S&P 500 component list down to a
+# tradable subset before any technical/news screening begins.
+universe:
+  # Minimum price in USD. Eliminates penny stocks with poor execution quality.
+  min_price: 10.0
+
+  # Minimum market capitalisation in USD (1e9 = $1 billion).
+  min_market_cap: 1_000_000_000     # $1 B — large-cap focus
+
+  # Minimum average daily dollar volume in USD (5e6 = $5 million).
+  # Ensures fills at scale and tight bid/ask spreads.
+  min_avg_dollar_volume: 5_000_000  # $5 M
+
+  # Lookback window (days) used to calculate average dollar volume.
+  avg_volume_lookback_days: 20
+
+  # Maximum bid/ask spread as a fraction of mid-price.
+  # Stocks with wider spreads have excessive transaction costs.
+  max_spread_pct: 0.5               # 0.5 % of mid price
+
+  # Exclude stocks with a market cap above this threshold (0 = no cap).
+  # Set to 0 to include mega-caps; set to e.g. 500e9 to cap at $500 B.
+  max_market_cap: 0
+
+  # Minimum average true range as a fraction of price.
+  # Filters out very low-volatility stocks unlikely to produce swing moves.
+  min_atr_pct: 0.5                  # 0.5 % minimum daily ATR / price
+
+# ---------------------------------------------------------------------------
+# Technical Indicator Windows
+# ---------------------------------------------------------------------------
+# Lookback periods used by the technical analysis engine.
+# All windows are in trading days unless otherwise noted.
+indicators:
+  # Exponential moving averages
+  ema_fast: 8          # Fast EMA for short-term trend
+  ema_slow: 21         # Slow EMA for medium-term trend
+  ema_200: 200         # Long-term trend / regime filter
+
+  # Simple moving averages
+  sma_50: 50
+  sma_200: 200
+
+  # Relative Strength Index
+  rsi_period: 14
+  rsi_oversold: 35     # Threshold to identify oversold conditions
+  rsi_overbought: 70   # Threshold to identify overbought conditions
+
+  # MACD
+  macd_fast: 12
+  macd_slow: 26
+  macd_signal: 9
+
+  # Bollinger Bands
+  bb_period: 20
+  bb_std: 2.0
+
+  # Average True Range (used for stop-loss / take-profit sizing)
+  atr_period: 14
+
+  # Average Directional Index (trend strength)
+  adx_period: 14
+  adx_strong_trend_threshold: 25   # ADX > 25 = strong trend
+
+  # Stochastic Oscillator
+  stoch_k_period: 14
+  stoch_d_period: 3
+  stoch_smooth: 3
+
+  # Volume indicators
+  volume_sma_period: 20            # Lookback for average volume baseline
+  volume_surge_multiplier: 1.5     # Volume ratio triggering a "surge" signal
+
+  # On-Balance Volume
+  obv_ema_period: 20
+
+  # VWAP (intraday, resets daily)
+  vwap_enabled: true
+
+  # Williams %R
+  williams_r_period: 14
+
+  # Commodity Channel Index
+  cci_period: 20
+
+  # Ichimoku Cloud
+  ichimoku_tenkan: 9
+  ichimoku_kijun: 26
+  ichimoku_senkou_b: 52
+
+  # Pivot points — used in support/resistance analysis
+  pivot_lookback_days: 5
+
+  # Donchian Channels
+  donchian_period: 20
+
+  # Market structure — swing high/low detection
+  swing_lookback: 5    # N bars on each side of a swing point
+
+# ---------------------------------------------------------------------------
+# Scoring Engine
+# ---------------------------------------------------------------------------
+# Composite score = weighted sum of six sub-scores (each 0–100).
+# Weights in the "moderate" profile must sum to 1.0.
+# See src/services/scoring/weights.py for all built-in profiles.
+scoring:
+  # Default weight profile name. Options: conservative | moderate | aggressive
+  weight_profile: moderate
+
+  # Override individual weights here (overrides profile defaults).
+  # Leave as null to use the profile values.
+  weights:
+    technical: 0.30      # Technical analysis composite (trend, momentum, etc.)
+    news: 0.15           # News catalyst quality and sentiment
+    sentiment: 0.10      # Social sentiment (Reddit, StockTwits)
+    liquidity: 0.10      # Liquidity quality (spread, volume depth)
+    regime: 0.15         # Market regime alignment (bull/bear/neutral)
+    risk_reward: 0.20    # Risk-reward quality (R:R ratio, stop placement)
+
+  # Minimum composite score (0–100) required to proceed to trade construction.
+  # Below this threshold the selector returns NO_TRADE.
+  no_trade_threshold: 55.0
+
+  # Minimum model confidence (0–100) required to place an order.
+  confidence_threshold: 60.0
+
+  # Minimum reward-to-risk ratio required.
+  min_risk_reward: 1.5
+
+  # Maximum number of candidates that pass scoring and are considered for entry.
+  top_n_candidates: 5
+
+# ---------------------------------------------------------------------------
+# Risk Controls
+# ---------------------------------------------------------------------------
+risk:
+  # Maximum fraction of total equity in a single position (0–1).
+  # e.g. 0.20 → no more than 20 % of portfolio in one stock.
+  max_position_pct: 0.20
+
+  # Maximum equity at risk on a single trade, expressed as % of portfolio.
+  # Risk = (entry - stop) * shares. Used by the Kelly/fixed-fraction sizer.
+  max_risk_per_trade_pct: 2.0
+
+  # Maximum total open risk across ALL positions (% of portfolio equity).
+  # New trades are blocked if total risk exceeds this.
+  max_total_risk_pct: 6.0
+
+  # Maximum intra-day portfolio loss (% of equity) before halting new entries.
+  # Resets at market open.
+  max_daily_loss_pct: 3.0
+
+  # Maximum peak-to-trough drawdown (% from equity high-water mark).
+  # Triggers the kill switch and halts all new positions.
+  max_drawdown_pct: 10.0
+
+  # Maximum number of concurrent open positions.
+  max_open_positions: 5
+
+  # Maximum number of new entries per trading day.
+  max_entries_per_day: 3
+
+  # Minimum cash buffer to keep uninvested (% of total equity).
+  min_cash_buffer_pct: 5.0
+
+  # Enable the kill switch mechanism.
+  kill_switch_enabled: true
+
+  # Automatically re-enable kill switch at market open next day.
+  kill_switch_auto_reset: false
+
+  # Stale data guard: if market data is older than this many seconds,
+  # block all trading until fresh data is available.
+  stale_data_threshold_seconds: 120
+
+  # Circuit breaker: fraction of portfolio equity lost in a single session
+  # that triggers an immediate halt of ALL open positions.
+  circuit_breaker_pct: 5.0
+
+  # Minimum time between order submissions to the same symbol (seconds).
+  order_rate_limit_seconds: 60
+
+# ---------------------------------------------------------------------------
+# Position Configuration
+# ---------------------------------------------------------------------------
+position:
+  # Maximum number of calendar days to hold a position.
+  # Swing trades targeting 3–5 day moves; time stop exits at day 7.
+  max_hold_days: 7
+
+  # Stop-loss distance from entry, measured in ATR multiples.
+  # stop_price = entry - (atr_period ATR × stop_loss_atr_mult)
+  stop_loss_atr_mult: 2.0
+
+  # Initial take-profit distance from entry, measured in ATR multiples.
+  take_profit_atr_mult: 2.0          # Gives 1:1 R:R at minimum threshold
+
+  # Trailing stop tightens to this ATR multiple once price reaches TP1.
+  trailing_stop_atr_mult: 1.5
+
+  # Partial profit-taking rule: take this fraction of the position at TP1.
+  partial_take_profit_fraction: 0.5  # Close half at first TP
+
+  # Enable trailing stop after TP1 is hit.
+  trailing_stop_enabled: true
+
+  # News shock exit: if a breaking negative headline scores below this
+  # threshold, exit immediately regardless of price level.
+  news_shock_exit_threshold: -0.6
+
+  # Thesis deterioration: if the composite score drops below this value
+  # on a re-score, close the position.
+  thesis_deterioration_threshold: 35.0
+
+  # Check interval (minutes) during market hours for position monitoring.
+  monitor_interval_minutes: 5
+
+  # Order type for entries.  Options: market | limit
+  entry_order_type: limit
+
+  # Limit order offset from current ask (fraction of ask price).
+  # e.g. 0.001 → place limit 0.1 % above ask to improve fill probability.
+  entry_limit_offset_pct: 0.001
+
+  # Time-in-force for limit orders.  Options: day | gtc | ioc | fok
+  entry_time_in_force: day
+
+  # Order type for exits.  market ensures fills but may incur slippage.
+  exit_order_type: market
+
+# ---------------------------------------------------------------------------
+# Market Data
+# ---------------------------------------------------------------------------
+data:
+  # Primary market data provider. Options: alpaca | finnhub | yfinance
+  primary_provider: alpaca
+
+  # Fallback providers tried in order if the primary is unavailable.
+  fallback_providers:
+    - finnhub
+    - yfinance
+
+  # OHLCV bar timeframe for technical analysis.
+  # Options: 1Min | 5Min | 15Min | 30Min | 1Hour | 1Day
+  bar_timeframe: 1Day
+
+  # Number of historical bars to fetch for indicator computation.
+  bar_lookback_days: 252           # ~1 year of trading days
+
+  # Real-time quote refresh interval during market hours (seconds).
+  quote_refresh_seconds: 30
+
+  # Redis TTL for cached market data bars (seconds).
+  bar_cache_ttl_seconds: 300      # 5 minutes
+
+  # Redis TTL for cached real-time quotes (seconds).
+  quote_cache_ttl_seconds: 15
+
+# ---------------------------------------------------------------------------
+# News Engine
+# ---------------------------------------------------------------------------
+news:
+  # News providers to use. Options: finnhub | newsapi
+  providers:
+    - finnhub
+    - newsapi
+
+  # Maximum age of a news item to consider (hours).
+  max_age_hours: 48
+
+  # Minimum news impact score (–1 to +1) to flag as a positive catalyst.
+  min_positive_impact: 0.3
+
+  # Negative news score below which an exit signal is generated.
+  negative_exit_threshold: -0.6
+
+  # FinBERT model ID (Hugging Face).
+  finbert_model: ProsusAI/finbert
+
+  # Maximum token length for FinBERT inference.
+  finbert_max_length: 512
+
+  # Redis TTL for cached news results (seconds).
+  news_cache_ttl_seconds: 900     # 15 minutes
+
+  # Near-duplicate detection similarity threshold (0–1).
+  dedup_similarity_threshold: 0.85
+
+# ---------------------------------------------------------------------------
+# Sentiment Engine
+# ---------------------------------------------------------------------------
+sentiment:
+  # Social sentiment providers. Options: reddit | stocktwits
+  providers:
+    - reddit
+    - stocktwits
+
+  # Subreddits to monitor for social sentiment.
+  reddit_subreddits:
+    - wallstreetbets
+    - stocks
+    - investing
+    - StockMarket
+
+  # Maximum age of a sentiment post to include (hours).
+  max_age_hours: 24
+
+  # Minimum number of posts required to generate a sentiment signal.
+  min_post_count: 3
+
+  # Redis TTL for cached sentiment scores (seconds).
+  sentiment_cache_ttl_seconds: 1800  # 30 minutes
+
+# ---------------------------------------------------------------------------
+# Market Regime
+# ---------------------------------------------------------------------------
+regime:
+  # Indicators used to classify the broad market regime.
+  # Options: spy_trend | vix | adx | breadth
+  indicators:
+    - spy_trend
+    - vix
+    - breadth
+
+  # VIX threshold above which the regime is classified as "high volatility".
+  high_vix_threshold: 25.0
+
+  # SPY 200-day EMA: if SPY is below this, regime = BEAR.
+  spy_trend_ema_period: 200
+
+  # Market breadth: % of S&P 500 stocks above 200-day MA.
+  # Below this value regime is considered bearish.
+  breadth_bull_threshold: 0.55    # >55 % above 200d = bull
+  breadth_bear_threshold: 0.40    # <40 % above 200d = bear
+
+  # Redis TTL for regime classification result (seconds).
+  regime_cache_ttl_seconds: 3600  # 1 hour
+
+  # Trading is blocked when regime = BEAR (unless override_in_bear = true).
+  block_in_bear_regime: true
+
+  # Allow trading in high-volatility regimes.
+  allow_in_high_vol: false
+
+# ---------------------------------------------------------------------------
+# Scheduler
+# ---------------------------------------------------------------------------
+schedule:
+  # Timezone for all cron expressions.
+  timezone: America/New_York
+
+  # Market scan cycle: runs once per day, 30 minutes before market open.
+  # Identifies candidates and places entry orders.
+  scan_cron: "29 9 * * 1-5"          # 09:29 ET Mon–Fri
+
+  # Position monitor cycle: runs every 5 minutes during market hours.
+  monitor_cron: "*/5 9-16 * * 1-5"
+
+  # Daily report: runs at market close.
+  report_cron: "1 16 * * 1-5"        # 16:01 ET Mon–Fri
+
+  # Universe refresh: updates the tradable universe daily pre-market.
+  universe_refresh_cron: "0 9 * * 1-5"
+
+  # Health check: internal liveness ping every minute.
+  health_cron: "* * * * *"
+
+  # Regime classification refresh.
+  regime_refresh_cron: "0 */1 9-16 * 1-5"  # Every hour during market hours
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+logging:
+  level: INFO          # DEBUG | INFO | WARNING | ERROR | CRITICAL
+  format: json         # json | console
+  # Additional structured fields attached to every log record.
+  extra_fields:
+    app: swingtrader
+    version: "0.1.0"
+
+# ---------------------------------------------------------------------------
+# API
+# ---------------------------------------------------------------------------
+api:
+  host: "0.0.0.0"
+  port: 8000
+  # Enable FastAPI automatic docs at /docs and /redoc.
+  docs_enabled: true
+  # Allowed CORS origins (comma-separated, or '*' for all).
+  cors_origins:
+    - "http://localhost:3000"
+
+# ---------------------------------------------------------------------------
+# Backtesting
+# ---------------------------------------------------------------------------
+backtest:
+  # Commission model: fixed per-share cost in USD.
+  commission_per_share: 0.005     # $0.005/share (typical retail)
+
+  # Slippage model: fraction of trade value added to costs.
+  slippage_pct: 0.05              # 0.05 %
+
+  # Initial simulated portfolio cash for backtests.
+  initial_capital: 100_000.0
+
+  # Whether to use bid/ask spreads in fill simulation.
+  use_spread: true
