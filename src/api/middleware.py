@@ -10,6 +10,7 @@ Provides:
 
 from __future__ import annotations
 
+import hmac
 import time
 import traceback
 import uuid
@@ -193,7 +194,7 @@ class ApiKeyMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         provided_key = request.headers.get("X-API-Key", "")
-        if provided_key != self._api_key:
+        if not hmac.compare_digest(provided_key, self._api_key):
             logger.warning(
                 "api_key_auth_failed",
                 path=request.url.path,

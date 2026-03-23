@@ -122,9 +122,10 @@ async def get_config(request: Request) -> ConfigResponse:
 
             import yaml
 
+            config_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), "config")
             config_path = os.environ.get(
                 "SWING_TRADER_CONFIG",
-                "/home/user/workspace/swing-trader/config/default.yaml",
+                os.path.join(config_dir, "default.yaml"),
             )
             with open(config_path) as f:
                 raw_config = yaml.safe_load(f) or {}

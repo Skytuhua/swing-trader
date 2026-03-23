@@ -76,9 +76,10 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     # ------------------------------------------------------------------
     db_ok = False
     try:
-        from src.core.database import init_db
+        from src.core.database import get_db_manager
 
-        await init_db(config)
+        db_mgr = get_db_manager()
+        await db_mgr.init()
         db_ok = True
         logger.info("database_connected")
     except Exception as exc:
@@ -89,9 +90,10 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     # ------------------------------------------------------------------
     redis_ok = False
     try:
-        from src.core.redis_client import init_redis
+        from src.core.redis_client import get_redis_manager
 
-        await init_redis(config)
+        redis_mgr = get_redis_manager()
+        await redis_mgr.init()
         redis_ok = True
         logger.info("redis_connected")
     except Exception as exc:
@@ -109,17 +111,17 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     # ------------------------------------------------------------------
     logger.info("api_shutdown")
     try:
-        from src.core.database import close_db
+        from src.core.database import get_db_manager
 
-        await close_db()
+        await get_db_manager().close()
         logger.info("database_disconnected")
     except Exception as exc:
         logger.warning("database_disconnect_error", error=str(exc))
 
     try:
-        from src.core.redis_client import close_redis
+        from src.core.redis_client import get_redis_manager
 
-        await close_redis()
+        await get_redis_manager().close()
         logger.info("redis_disconnected")
     except Exception as exc:
         logger.warning("redis_disconnect_error", error=str(exc))
@@ -298,10 +300,10 @@ def _default_config() -> dict[str, Any]:
         },
         "api": {
             "api_key": None,
-            "cors_origins": ["*"],
+            "cors_origins": ["http://localhost:3000", "http://localhost:5173"],
         },
         "database": {
-            "url": "postgresql+asyncpg://swing:swing@localhost:5432/swingtrader",
+            "url": "postgresql+asyncpg://localhost:5432/swingtrader",
         },
         "redis": {
             "url": "redis://localhost:6379/0",
@@ -318,9 +320,10 @@ def _load_config_from_yaml() -> dict[str, Any]:
 
     import yaml
 
+    config_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "config")
     config_path = os.environ.get(
         "SWING_TRADER_CONFIG",
-        "/home/user/workspace/swing-trader/config/default.yaml",
+        os.path.join(config_dir, "default.yaml"),
     )
     try:
         with open(config_path) as f:

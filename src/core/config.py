@@ -48,7 +48,7 @@ class DatabaseConfig:
     url: str = field(
         default_factory=lambda: os.environ.get(
             "DB_URL",
-            "postgresql+asyncpg://swingtrader:swingtrader@localhost:5432/swingtrader",
+            "postgresql+asyncpg://localhost:5432/swingtrader",
         )
     )
     pool_size: int = 5

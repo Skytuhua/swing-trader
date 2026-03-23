@@ -76,7 +76,9 @@ class RedisManager:
             socket_connect_timeout=cfg.socket_connect_timeout,
             decode_responses=False,  # We handle encoding ourselves via orjson
         )
-        logger.info("Redis client initialised.", extra={"url": cfg.url})
+        # Log only the host portion of the URL to avoid leaking credentials
+        safe_url = cfg.url.split("@")[-1] if "@" in cfg.url else cfg.url
+        logger.info("Redis client initialised.", extra={"url": safe_url})
 
     async def close(self) -> None:
         """Close all connections in the pool."""

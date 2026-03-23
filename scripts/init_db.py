@@ -18,7 +18,7 @@ Usage:
 
 Environment variables (set in .env or export before running):
     DATABASE_URL  — asyncpg connection string, e.g.:
-                    postgresql+asyncpg://swing:swing@localhost:5432/swingtrader
+                    postgresql+asyncpg://user:pass@localhost:5432/swingtrader
 
 Notes:
   - This script is idempotent: running it multiple times is safe.
@@ -76,7 +76,7 @@ def get_database_url() -> str:
             "\n[ERROR] DATABASE_URL environment variable is not set.\n"
             "  Set it in your .env file or export it before running this script.\n"
             "  Example:\n"
-            "    DATABASE_URL=postgresql+asyncpg://swing:swing@localhost:5432/swingtrader\n"
+            "    DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/swingtrader\n"
         )
         sys.exit(1)
     # Ensure the URL uses the asyncpg driver.

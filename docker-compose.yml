@@ -47,13 +47,13 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-swing}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-swing}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:-swingtrader}
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     networks:
       - swing_net
     healthcheck:
@@ -81,6 +81,7 @@ services:
     container_name: swingtrader_redis
     restart: unless-stopped
     # Persistence: AOF for durability + RDB snapshot every 60 s if ≥1 key changed.
+    # Redis is only exposed on localhost; bind to internal network for container access.
     command: >
       redis-server
         --appendonly yes
@@ -89,10 +90,11 @@ services:
         --maxmemory 512mb
         --maxmemory-policy allkeys-lru
         --loglevel notice
+        --protected-mode yes
     volumes:
       - redis_data:/data
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     networks:
       - swing_net
     healthcheck:
@@ -122,7 +124,7 @@ services:
       - .env
     environment:
       # Override DB / Redis URLs to point at container names rather than localhost.
-      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-swing}:${POSTGRES_PASSWORD:-swing}@postgres:5432/${POSTGRES_DB:-swingtrader}"
+      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-swing}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-swingtrader}"
       REDIS_URL: "redis://redis:6379/0"
     volumes:
       - app_logs:/app/logs

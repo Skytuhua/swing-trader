@@ -128,6 +128,12 @@ $RECYCLE.BIN/
 .env
 .env.*
 !.env.example          # Keep the example file
+
+# ---------------------------------------------------------------------------
+# Claude Code / MCP configuration (may contain tokens)
+# ---------------------------------------------------------------------------
+.claude/
+.mcp.json
 *.pem
 *.key
 *.crt
