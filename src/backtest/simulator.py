@@ -108,9 +108,23 @@ class MarketSimulator:
         data: pd.DataFrame | dict[str, pd.DataFrame],
         slippage_pct: float = 0.001,
         commission_per_share: float = 0.005,
+        simulation_config: Any = None,
     ) -> None:
         self.slippage_pct = slippage_pct
         self.commission_per_share = commission_per_share
+
+        # Configurable slippage model (if SimulationConfig is available)
+        self._slippage_model = None
+        if simulation_config is not None:
+            try:
+                from src.simulation.slippage import SlippageModel
+                self._slippage_model = SlippageModel(simulation_config)
+            except Exception:
+                pass
+
+        # Caches for volume and ATR (populated during advance_to)
+        self._avg_daily_volumes: dict[str, float] = {}
+        self._atr_cache: dict[str, float] = {}
 
         # Normalize to dict[ticker, DataFrame]
         if isinstance(data, pd.DataFrame):
@@ -161,9 +175,22 @@ class MarketSimulator:
         return days
 
     def advance_to(self, target_date: date) -> None:
-        """Advance the simulation cursor to target_date.  Clears cached slices."""
+        """Advance the simulation cursor to target_date.  Clears cached slices.
+
+        Also updates ATR and average volume caches for slippage model use.
+        """
         self._current_date = target_date
         self._slices = {}
+
+        # Update volume and ATR caches for configurable slippage
+        if self._slippage_model is not None:
+            for ticker in self._data:
+                df_slice = self.get_slice(ticker, target_date, bars=30)
+                if len(df_slice) >= 5:
+                    close = float(df_slice["close"].iloc[-1])
+                    avg_vol = float(df_slice["volume"].tail(20).mean())
+                    self._avg_daily_volumes[ticker] = avg_vol * close
+                    self._atr_cache[ticker] = _compute_atr(df_slice) / close if close > 0 else 0.015
 
     # ------------------------------------------------------------------
     # Bar access
@@ -288,15 +315,50 @@ class MarketSimulator:
     # ------------------------------------------------------------------
 
     def fill_buy(self, ticker: str, reference_price: float) -> tuple[float, float]:
-        """Simulate a buy fill: price + slippage. Returns (fill_price, slippage_dollars)."""
-        fill = reference_price * (1.0 + self.slippage_pct)
-        slippage_dollars = reference_price * self.slippage_pct
+        """Simulate a buy fill: price + slippage. Returns (fill_price, slippage_dollars).
+
+        If a SimulationConfig-backed SlippageModel is available, uses it for
+        volume/volatility-aware slippage. Otherwise falls back to flat percentage.
+        """
+        if self._slippage_model is not None:
+            addv = self._avg_daily_volumes.get(ticker, 100_000_000.0)
+            atr_pct = self._atr_cache.get(ticker, 0.015)
+            order_value = reference_price * 100  # estimate
+            result = self._slippage_model.calculate(
+                order_dollar_value=order_value,
+                avg_daily_dollar_volume=addv,
+                atr_pct=atr_pct,
+                side="buy",
+            )
+            slip_pct = result.slippage_pct
+        else:
+            slip_pct = self.slippage_pct
+
+        fill = reference_price * (1.0 + slip_pct)
+        slippage_dollars = reference_price * slip_pct
         return round(fill, 6), round(slippage_dollars, 6)
 
     def fill_sell(self, ticker: str, reference_price: float) -> tuple[float, float]:
-        """Simulate a sell fill: price - slippage. Returns (fill_price, slippage_dollars)."""
-        fill = reference_price * (1.0 - self.slippage_pct)
-        slippage_dollars = reference_price * self.slippage_pct
+        """Simulate a sell fill: price - slippage. Returns (fill_price, slippage_dollars).
+
+        Uses configurable slippage model if available.
+        """
+        if self._slippage_model is not None:
+            addv = self._avg_daily_volumes.get(ticker, 100_000_000.0)
+            atr_pct = self._atr_cache.get(ticker, 0.015)
+            order_value = reference_price * 100
+            result = self._slippage_model.calculate(
+                order_dollar_value=order_value,
+                avg_daily_dollar_volume=addv,
+                atr_pct=atr_pct,
+                side="sell",
+            )
+            slip_pct = result.slippage_pct
+        else:
+            slip_pct = self.slippage_pct
+
+        fill = reference_price * (1.0 - slip_pct)
+        slippage_dollars = reference_price * slip_pct
         return round(fill, 6), round(slippage_dollars, 6)
 
     # ------------------------------------------------------------------

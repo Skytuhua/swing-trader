@@ -428,3 +428,53 @@ backtest:
 
   # Whether to use bid/ask spreads in fill simulation.
   use_spread: true
+
+# ---------------------------------------------------------------------------
+# Simulation Accuracy (Paper Trading & Backtesting)
+# ---------------------------------------------------------------------------
+# These parameters control the realism of fill simulation. They are used by
+# PaperBroker and MarketMicrostructureModel to make paper results closer
+# to live trading outcomes.
+simulation:
+  # --- Slippage model ---
+  # Options: fixed | volume_weighted | volatility_adjusted | composite
+  slippage_model: volume_weighted
+  slippage_fixed_pct: 0.05           # Fixed slippage % (used when model=fixed)
+  slippage_base_bps: 5.0             # Base impact in bps for volume-weighted model
+  slippage_impact_exponent: 0.5      # sqrt model exponent (0.5 = square-root)
+  slippage_volatility_weight: 0.5    # How much ATR affects slippage (0-1)
+  slippage_max_pct: 5.0              # Hard cap on slippage %
+
+  # --- Fee/commission model ---
+  # Options: flat | per_share | percentage | tiered
+  fee_model: per_share
+  commission_per_share: 0.005        # $/share for per_share model
+  commission_flat_fee: 0.0           # $ per order for flat model
+  commission_pct: 0.0                # % of trade value for percentage model
+  maker_fee_pct: 0.0                 # Maker rebate/fee for limit orders
+  taker_fee_pct: 0.0                 # Taker fee for market orders
+  sec_fee_per_million: 8.0           # SEC fee (sells only), $/million
+  taf_fee_per_share: 0.000166        # TAF fee per share (sells only)
+
+  # --- Bid-ask spread simulation ---
+  # Options: fixed | percentage | volume_tiered
+  spread_model: volume_tiered
+  spread_fixed_cents: 0.01           # Fixed half-spread in cents
+  spread_fixed_pct: 0.05             # Fixed half-spread as % of mid
+  spread_time_of_day_scaling: true   # Wider spreads at open/close
+
+  # --- Partial fill simulation ---
+  partial_fill_enabled: true
+  partial_fill_volume_threshold_pct: 5.0   # % of avg daily volume to trigger partial fills
+  partial_fill_min_rate: 0.10              # Minimum 10% fill rate
+  partial_fill_randomness: 0.15            # +/- 15% randomness on fill rate
+
+  # --- Execution latency simulation ---
+  latency_enabled: true
+  latency_base_ms: 50.0             # Base execution delay in ms
+  latency_jitter_ms: 100.0          # Random jitter on top of base
+  latency_price_drift_bps: 2.0      # Price drift during latency (bps per 100ms)
+
+  # --- Gap handling ---
+  gap_handling_enabled: true
+  gap_stop_fill_at_open: true        # Fill stops at open price if gapped through

@@ -197,6 +197,55 @@ class PositionConfig:
 
 
 @dataclass
+class SimulationConfig:
+    """Paper trading simulation accuracy parameters.
+
+    Controls slippage, fees, spread, partial fills, latency,
+    and gap handling for realistic paper trading and backtesting.
+    """
+
+    # --- Slippage model ---
+    slippage_model: str = "volume_weighted"  # fixed | volume_weighted | volatility_adjusted | composite
+    slippage_fixed_pct: float = 0.05         # Fixed slippage % (used when model=fixed)
+    slippage_base_bps: float = 5.0           # Base slippage in bps for volume-weighted model
+    slippage_impact_exponent: float = 0.5    # Square-root impact exponent
+    slippage_volatility_weight: float = 0.5  # Weight of ATR-based volatility adjustment
+    slippage_max_pct: float = 5.0            # Maximum slippage cap (% of price)
+
+    # --- Fee/commission model ---
+    fee_model: str = "per_share"             # flat | per_share | percentage | tiered
+    commission_per_share: float = 0.005      # $/share (per_share model)
+    commission_flat_fee: float = 0.0         # Flat fee per order (flat model)
+    commission_pct: float = 0.0              # % of trade value (percentage model)
+    maker_fee_pct: float = 0.0              # Maker fee % (for limit orders)
+    taker_fee_pct: float = 0.0              # Taker fee % (for market orders)
+    sec_fee_per_million: float = 8.0        # SEC fee per $1M of sell proceeds
+    taf_fee_per_share: float = 0.000166     # TAF fee per share sold
+
+    # --- Bid-ask spread ---
+    spread_model: str = "volume_tiered"      # fixed | percentage | volume_tiered
+    spread_fixed_cents: float = 0.01         # Fixed spread in cents (fixed model)
+    spread_fixed_pct: float = 0.05           # Fixed spread % (percentage model)
+    spread_time_of_day_scaling: bool = True   # Apply TOD multipliers to spreads
+
+    # --- Partial fills ---
+    partial_fill_enabled: bool = True
+    partial_fill_volume_threshold_pct: float = 5.0  # % of daily volume above which partial fill kicks in
+    partial_fill_min_rate: float = 0.1               # Minimum fill rate (10%)
+    partial_fill_randomness: float = 0.15            # Random variation in fill rate (+/- %)
+
+    # --- Execution latency ---
+    latency_enabled: bool = True
+    latency_base_ms: float = 50.0            # Base latency in milliseconds
+    latency_jitter_ms: float = 100.0         # Random jitter (uniform) in ms
+    latency_price_drift_bps: float = 2.0     # Price drift during latency (bps per 100ms)
+
+    # --- Gap handling ---
+    gap_handling_enabled: bool = True
+    gap_stop_fill_at_open: bool = True        # Fill stops at open price if gapped through
+
+
+@dataclass
 class ScheduleConfig:
     """APScheduler cron configuration."""
 
@@ -261,6 +310,9 @@ class Settings(BaseSettings):
 
     # Scheduler
     schedule: Any = Field(default_factory=ScheduleConfig)
+
+    # Simulation accuracy
+    simulation: Any = Field(default_factory=SimulationConfig)
 
     # Application
     app: Any = Field(default_factory=AppConfig)
@@ -353,6 +405,10 @@ class Settings(BaseSettings):
         if "schedule" in raw:
             _apply(self.schedule, raw["schedule"])
 
+        # Simulation
+        if "simulation" in raw:
+            _apply(self.simulation, raw["simulation"])
+
         # Apply env var overrides (highest priority)
         _apply_env_overrides(self)
 
@@ -443,6 +499,7 @@ __all__ = [
     "RiskConfig",
     "PositionConfig",
     "ScheduleConfig",
+    "SimulationConfig",
     # Accessors
     "get_settings",
     "get_config",

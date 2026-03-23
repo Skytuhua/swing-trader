@@ -41,6 +41,7 @@ from src.services.execution.market_simulator import (
     MarketMicrostructureModel,
     SpreadInfo,
 )
+from src.simulation.fees import FeeCalculator
 
 logger = structlog.get_logger(__name__)
 
@@ -83,6 +84,7 @@ class PaperBroker(BrokerAdapter):
         # True enables partial fills via the microstructure model.
         simulate_partial_fills: bool = True,
         rng_seed: Optional[int] = None,
+        simulation_config: Optional[Any] = None,
     ) -> None:
         self.initial_cash = initial_cash
         self.commission_per_share = commission_per_share
@@ -90,8 +92,24 @@ class PaperBroker(BrokerAdapter):
         self.slippage_pct = slippage_pct
         self.simulate_partial_fills = simulate_partial_fills
 
-        # Core microstructure engine
-        self._model = MarketMicrostructureModel(rng_seed=rng_seed)
+        # Load simulation config from global settings if not explicitly provided
+        self._sim_config = simulation_config
+        if self._sim_config is None:
+            try:
+                from src.core.config import get_settings
+                self._sim_config = get_settings().simulation
+            except Exception:
+                pass  # Config not available, use defaults
+
+        # Core microstructure engine (with simulation config for enhanced models)
+        self._model = MarketMicrostructureModel(
+            rng_seed=rng_seed, config=self._sim_config
+        )
+
+        # Fee calculator (uses simulation config or falls back to per-share)
+        self._fee_calculator: Optional[FeeCalculator] = None
+        if self._sim_config is not None:
+            self._fee_calculator = FeeCalculator(self._sim_config)
 
         # Broker state
         self._cash: float = initial_cash
@@ -240,8 +258,17 @@ class PaperBroker(BrokerAdapter):
         filled_qty = fill_result.filled_qty
         fill_price = fill_result.fill_price
 
-        # --- Apply commission ---
-        commission = self.commission_per_share * filled_qty
+        # --- Apply commission/fees ---
+        if self._fee_calculator is not None:
+            fee_result = self._fee_calculator.calculate(
+                quantity=filled_qty,
+                fill_price=fill_price,
+                side=order.side.value,
+                order_type=order.order_type.value,
+            )
+            commission = fee_result.total_fee
+        else:
+            commission = self.commission_per_share * filled_qty
 
         # --- Update portfolio state ---
         if order.side == OrderSide.BUY:

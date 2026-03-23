@@ -107,7 +107,8 @@ class DatabaseManager:
         """Create all ORM tables that do not yet exist.
 
         Imports all models to ensure their metadata is registered before
-        the CREATE TABLE statements are issued.
+        the CREATE TABLE statements are issued. Also creates performance
+        indexes on critical columns.
         """
         if self.engine is None:
             await self.init()
@@ -121,6 +122,18 @@ class DatabaseManager:
             await conn.run_sync(Base.metadata.create_all)
 
         logger.info("Database tables created / verified.")
+
+        # Create performance indexes
+        try:
+            from src.performance.db_helpers import ensure_indexes
+            executed = await ensure_indexes(self.engine)
+            if executed:
+                logger.info(
+                    "Performance indexes created.",
+                    extra={"count": len(executed)},
+                )
+        except Exception as exc:
+            logger.debug("Index creation skipped: %s", exc)
 
     async def close(self) -> None:
         """Dispose the engine and release all pooled connections."""

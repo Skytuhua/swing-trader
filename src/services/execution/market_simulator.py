@@ -17,9 +17,12 @@ import math
 import random
 from dataclasses import dataclass, field
 from datetime import time
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from src.core.enums import OrderSide, OrderType
+
+if TYPE_CHECKING:
+    from src.core.config import SimulationConfig
 
 
 # ---------------------------------------------------------------------------
@@ -161,7 +164,11 @@ class MarketMicrostructureModel:
         )
     """
 
-    def __init__(self, rng_seed: Optional[int] = None) -> None:
+    def __init__(
+        self,
+        rng_seed: Optional[int] = None,
+        config: Optional[SimulationConfig] = None,
+    ) -> None:
         # Per-ticker state (injected by broker / backtester)
         self._addv: dict[str, float] = {}      # Average daily dollar volume
         self._atr:  dict[str, float] = {}      # ATR in dollars (absolute)
@@ -171,6 +178,30 @@ class MarketMicrostructureModel:
 
         # Execution metrics ledger
         self._records: list[ExecutionRecord] = []
+
+        # Load simulation sub-models from config
+        self._sim_config = config
+        if config is not None:
+            from src.simulation.slippage import SlippageModel
+            from src.simulation.fees import FeeCalculator
+            from src.simulation.spread import SpreadSimulator
+            from src.simulation.partial_fills import PartialFillSimulator
+            from src.simulation.latency import LatencySimulator
+            from src.simulation.gaps import GapHandler
+
+            self._slippage_model = SlippageModel(config)
+            self._fee_calculator = FeeCalculator(config)
+            self._spread_sim = SpreadSimulator(config, rng=self._rng)
+            self._partial_fill_sim = PartialFillSimulator(config, rng=self._rng)
+            self._latency_sim = LatencySimulator(config, rng=self._rng)
+            self._gap_handler = GapHandler(config)
+        else:
+            self._slippage_model = None
+            self._fee_calculator = None
+            self._spread_sim = None
+            self._partial_fill_sim = None
+            self._latency_sim = None
+            self._gap_handler = None
 
     # ------------------------------------------------------------------
     # State injection
@@ -247,6 +278,8 @@ class MarketMicrostructureModel:
         limit_price: Optional[float] = None,
         stop_price: Optional[float] = None,
         current_time: Optional[time] = None,
+        open_price: Optional[float] = None,
+        previous_close: Optional[float] = None,
     ) -> FillResult:
         """Simulate realistic fill for a single order leg.
 
@@ -258,7 +291,9 @@ class MarketMicrostructureModel:
         2. Compute fill probability (limits) or force-fill (market).
         3. Compute market impact slippage.
         4. Apply partial fill if order is large relative to ADDV.
-        5. Compute fill delay for limit/stop orders.
+        5. Apply execution latency price drift.
+        6. Handle gap-through for stop orders.
+        7. Compute fill delay for limit/stop orders.
         """
         addv = self._addv.get(ticker, _DEFAULT_ADDV)
         atr  = self._atr.get(ticker, mid_price * _DEFAULT_ATR_PCT)
@@ -300,14 +335,33 @@ class MarketMicrostructureModel:
             )
 
         # --- Step 3: Market impact slippage ---
-        impact_pct = self._compute_market_impact(
-            ticker=ticker,
-            qty=requested_qty,
-            mid_price=mid_price,
-            addv=addv,
-            atr=atr,
-            slippage_mult=slippage_mult,
-        )
+        atr_pct = atr / mid_price if mid_price > 0 else _DEFAULT_ATR_PCT
+
+        if self._slippage_model is not None:
+            # Use configurable slippage model
+            order_dollar_value = requested_qty * mid_price
+            slip_result = self._slippage_model.calculate(
+                order_dollar_value=order_dollar_value,
+                avg_daily_dollar_volume=addv,
+                atr_pct=atr_pct,
+                side=side.value,
+            )
+            impact_pct = slip_result.slippage_pct
+            # Apply TOD multiplier
+            impact_pct *= slippage_mult
+            # Add noise
+            impact_pct *= self._rng.uniform(0.85, 1.15)
+            # Cap
+            impact_pct = min(impact_pct, 0.05)
+        else:
+            impact_pct = self._compute_market_impact(
+                ticker=ticker,
+                qty=requested_qty,
+                mid_price=mid_price,
+                addv=addv,
+                atr=atr,
+                slippage_mult=slippage_mult,
+            )
 
         # Impact is always adverse: buys pay more, sells receive less
         if side == OrderSide.BUY:
@@ -315,23 +369,53 @@ class MarketMicrostructureModel:
         else:
             fill_price = base_fill * (1.0 - impact_pct)
 
-        # Stop orders gap through — add extra slippage (0.05–0.20% gap risk)
-        if order_type == OrderType.STOP:
+        # --- Step 4: Execution latency price drift ---
+        if self._latency_sim is not None:
+            latency_result = self._latency_sim.simulate(
+                signal_price=fill_price,
+                atr_pct=atr_pct,
+                side=side.value,
+            )
+            fill_price = latency_result.adjusted_price
+            fill_delay += latency_result.delay_ms / 1000.0  # Convert ms to seconds
+
+        # --- Step 5: Gap handling for stop orders ---
+        if order_type == OrderType.STOP and self._gap_handler is not None:
+            if open_price is not None and previous_close is not None:
+                gap_result = self._gap_handler.check_gap_fill(
+                    stop_price=stop_price or fill_price,
+                    open_price=open_price,
+                    previous_close=previous_close,
+                    side=side.value,
+                )
+                if gap_result.is_gapped:
+                    fill_price = gap_result.fill_price
+        elif order_type == OrderType.STOP:
+            # Legacy gap-through behavior
             gap_pct = self._rng.uniform(0.0005, 0.0020) * slippage_mult
             if side == OrderSide.SELL:
                 fill_price *= (1.0 - gap_pct)
             else:
                 fill_price *= (1.0 + gap_pct)
 
-        # --- Step 4: Partial fills ---
-        filled_qty, is_partial = self._compute_partial_fill(
-            ticker=ticker,
-            requested_qty=requested_qty,
-            mid_price=mid_price,
-            addv=addv,
-        )
+        # --- Step 6: Partial fills ---
+        if self._partial_fill_sim is not None:
+            pf_result = self._partial_fill_sim.calculate(
+                requested_qty=requested_qty,
+                mid_price=mid_price,
+                avg_daily_dollar_volume=addv,
+            )
+            filled_qty = pf_result.filled_qty
+            is_partial = pf_result.is_partial
+        else:
+            filled_qty, is_partial = self._compute_partial_fill(
+                ticker=ticker,
+                requested_qty=requested_qty,
+                mid_price=mid_price,
+                addv=addv,
+            )
 
-        # --- Step 5: Cost breakdown ---
+        # --- Step 7: Cost breakdown ---
         spread_cost_per_share = spread_info.half_spread  # one-way spread cost
         spread_total = spread_cost_per_share * filled_qty
 
