@@ -430,6 +430,95 @@ backtest:
   use_spread: true
 
 # ---------------------------------------------------------------------------
+# Market Regime Detection (NEW)
+# ---------------------------------------------------------------------------
+# Multi-indicator regime classification using ADX, EMA alignment, BB width,
+# RSI momentum, and volume confirmation.  Classifies into 6 regimes:
+# BULL, BEAR, SIDEWAYS, BULL_WEAK, BEAR_WEAK, UNCERTAIN.
+regime_detection:
+  enabled: true
+  ema_periods: [21, 55, 200]
+  adx_period: 14
+  adx_trending_threshold: 25     # ADX > 25 = trending market
+  adx_ranging_threshold: 20      # ADX < 20 = ranging/sideways market
+  bb_width_threshold: 0.05       # BB width below this = consolidation
+  rsi_period: 14
+  volume_period: 20
+  update_interval_minutes: 60    # Re-classify regime every hour
+  timeframes: ["1d", "4h"]       # Primary + confirmation timeframe
+
+# ---------------------------------------------------------------------------
+# Adaptive ATR Trailing Stops (NEW)
+# ---------------------------------------------------------------------------
+# Dynamic stop management that adapts to market conditions.
+# Includes ATR trailing, Chandelier Exit, and scale-out mechanism.
+adaptive_stops:
+  enabled: true
+  atr_period: 14
+  trailing_multiplier: 2.5       # Base ATR multiplier (adapts per regime)
+  chandelier_enabled: true       # Use Chandelier Exit (HHV/LLV based)
+  scale_out_enabled: true        # Enable partial profit-taking
+  scale_out_pct: 0.5             # Sell 50% at first target
+  first_target_atr_mult: 2.0     # TP1 distance in ATR multiples
+  second_target_atr_mult: 4.0    # TP2 distance in ATR multiples
+
+# ---------------------------------------------------------------------------
+# Circuit Breaker & Risk Controls (NEW)
+# ---------------------------------------------------------------------------
+# Defensive safety mechanisms: daily loss, consecutive loss, flash crash,
+# max drawdown, position limits, fat-finger protection.
+circuit_breaker:
+  enabled: true
+  max_daily_loss_pct: 3.0        # Halt trading if daily loss > 3%
+  consecutive_loss_limit: 3       # Pause after 3 consecutive losses
+  cooldown_minutes: 60            # Cooldown duration after consecutive losses
+  flash_crash_deviation_pct: 4.0  # Price deviation triggering flash crash
+  flash_crash_suspend_seconds: 120 # Order suspension duration
+  max_drawdown_pct: 7.0           # Force close all at 7% drawdown from peak
+  max_position_pct: 5.0           # Max 5% of account per trade
+  max_sector_exposure_pct: 20.0   # Max 20% in any one sector
+  fat_finger_max_deviation_pct: 0.5 # Limit price must be within 0.5% of mid
+
+# ---------------------------------------------------------------------------
+# Kelly Criterion Position Sizing (NEW)
+# ---------------------------------------------------------------------------
+# Mathematically optimal position sizing with safety adjustments.
+position_sizing:
+  method: "half_kelly"           # kelly | half_kelly | fixed_fraction | volatility_adjusted
+  max_position_pct: 5.0          # Hard cap on position size
+  kelly_lookback_trades: 100     # Number of recent trades for Kelly calculation
+  min_trades_for_kelly: 30       # Minimum history before using Kelly
+  default_risk_per_trade_pct: 1.0 # Fallback fixed-fraction risk %
+  correlation_threshold: 0.7     # Reduce size when correlation exceeds this
+
+# ---------------------------------------------------------------------------
+# Signal Confidence Scoring (NEW)
+# ---------------------------------------------------------------------------
+# Multi-factor scoring system: 0-100 across trend, volume, indicator
+# confluence, regime compatibility, and relative strength.
+signal_scoring:
+  enabled: true
+  min_score_to_trade: 60         # Minimum score to enter a trade
+  full_position_score: 75        # Score for full position size
+  trend_weight: 25               # Max points for trend alignment
+  volume_weight: 15              # Max points for volume confirmation
+  indicator_weight: 25           # Max points for indicator confluence
+  regime_weight: 20              # Max points for regime compatibility
+  relative_strength_weight: 15   # Max points for relative strength
+
+# ---------------------------------------------------------------------------
+# WebSocket Real-Time Data (NEW)
+# ---------------------------------------------------------------------------
+# WebSocket streaming with auto-reconnection, bar aggregation, and fallback.
+websocket:
+  enabled: false                  # Disabled by default for swing trading
+  url: ""                         # WebSocket endpoint URL
+  bar_size: "1m"                  # Bar aggregation size
+  heartbeat_interval: 30          # Ping interval in seconds
+  max_reconnect_delay: 60         # Max backoff between reconnects
+  fallback_to_rest: true          # Fall back to REST polling if WS fails
+
+# ---------------------------------------------------------------------------
 # Simulation Accuracy (Paper Trading & Backtesting)
 # ---------------------------------------------------------------------------
 # These parameters control the realism of fill simulation. They are used by

@@ -246,6 +246,90 @@ class SimulationConfig:
 
 
 @dataclass
+class RegimeDetectionConfig:
+    """Market regime detection configuration."""
+
+    enabled: bool = True
+    ema_periods: list = field(default_factory=lambda: [21, 55, 200])
+    adx_period: int = 14
+    adx_trending_threshold: float = 25.0
+    adx_ranging_threshold: float = 20.0
+    bb_width_threshold: float = 0.05
+    rsi_period: int = 14
+    volume_period: int = 20
+    update_interval_minutes: int = 60
+    timeframes: list = field(default_factory=lambda: ["1d", "4h"])
+
+
+@dataclass
+class AdaptiveStopsConfig:
+    """Adaptive ATR trailing stop configuration."""
+
+    enabled: bool = True
+    atr_period: int = 14
+    trailing_multiplier: float = 2.5
+    chandelier_enabled: bool = True
+    scale_out_enabled: bool = True
+    scale_out_pct: float = 0.5
+    first_target_atr_mult: float = 2.0
+    second_target_atr_mult: float = 4.0
+
+
+@dataclass
+class CircuitBreakerConfig:
+    """Circuit breaker and risk controls configuration."""
+
+    enabled: bool = True
+    max_daily_loss_pct: float = 3.0
+    consecutive_loss_limit: int = 3
+    cooldown_minutes: float = 60.0
+    flash_crash_deviation_pct: float = 4.0
+    flash_crash_suspend_seconds: float = 120.0
+    max_drawdown_pct: float = 7.0
+    max_position_pct: float = 5.0
+    max_sector_exposure_pct: float = 20.0
+    fat_finger_max_deviation_pct: float = 0.5
+
+
+@dataclass
+class PositionSizingConfig:
+    """Kelly Criterion position sizing configuration."""
+
+    method: str = "half_kelly"  # kelly | half_kelly | fixed_fraction | volatility_adjusted
+    max_position_pct: float = 5.0
+    kelly_lookback_trades: int = 100
+    min_trades_for_kelly: int = 30
+    default_risk_per_trade_pct: float = 1.0
+    correlation_threshold: float = 0.7
+
+
+@dataclass
+class SignalScoringConfig:
+    """Signal confidence scoring configuration."""
+
+    enabled: bool = True
+    min_score_to_trade: float = 60.0
+    full_position_score: float = 75.0
+    trend_weight: float = 25.0
+    volume_weight: float = 15.0
+    indicator_weight: float = 25.0
+    regime_weight: float = 20.0
+    relative_strength_weight: float = 15.0
+
+
+@dataclass
+class WebSocketConfig:
+    """WebSocket real-time data streaming configuration."""
+
+    enabled: bool = False
+    url: str = ""
+    bar_size: str = "1m"
+    heartbeat_interval: float = 30.0
+    max_reconnect_delay: float = 60.0
+    fallback_to_rest: bool = True
+
+
+@dataclass
 class ScheduleConfig:
     """APScheduler cron configuration."""
 
@@ -313,6 +397,14 @@ class Settings(BaseSettings):
 
     # Simulation accuracy
     simulation: Any = Field(default_factory=SimulationConfig)
+
+    # New high-impact features
+    regime_detection: Any = Field(default_factory=RegimeDetectionConfig)
+    adaptive_stops: Any = Field(default_factory=AdaptiveStopsConfig)
+    circuit_breaker: Any = Field(default_factory=CircuitBreakerConfig)
+    position_sizing: Any = Field(default_factory=PositionSizingConfig)
+    signal_scoring: Any = Field(default_factory=SignalScoringConfig)
+    websocket: Any = Field(default_factory=WebSocketConfig)
 
     # Application
     app: Any = Field(default_factory=AppConfig)
@@ -409,6 +501,20 @@ class Settings(BaseSettings):
         if "simulation" in raw:
             _apply(self.simulation, raw["simulation"])
 
+        # New high-impact features
+        if "regime_detection" in raw:
+            _apply(self.regime_detection, raw["regime_detection"])
+        if "adaptive_stops" in raw:
+            _apply(self.adaptive_stops, raw["adaptive_stops"])
+        if "circuit_breaker" in raw:
+            _apply(self.circuit_breaker, raw["circuit_breaker"])
+        if "position_sizing" in raw:
+            _apply(self.position_sizing, raw["position_sizing"])
+        if "signal_scoring" in raw:
+            _apply(self.signal_scoring, raw["signal_scoring"])
+        if "websocket" in raw:
+            _apply(self.websocket, raw["websocket"])
+
         # Apply env var overrides (highest priority)
         _apply_env_overrides(self)
 
@@ -500,6 +606,13 @@ __all__ = [
     "PositionConfig",
     "ScheduleConfig",
     "SimulationConfig",
+    # New feature configs
+    "RegimeDetectionConfig",
+    "AdaptiveStopsConfig",
+    "CircuitBreakerConfig",
+    "PositionSizingConfig",
+    "SignalScoringConfig",
+    "WebSocketConfig",
     # Accessors
     "get_settings",
     "get_config",

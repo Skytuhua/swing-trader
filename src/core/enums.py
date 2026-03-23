@@ -12,6 +12,17 @@ class MarketRegime(str, Enum):
     UNFAVORABLE = "unfavorable"
 
 
+class DetailedMarketRegime(str, Enum):
+    """Fine-grained market regime classification (6 states)."""
+
+    BULL = "bull"
+    BEAR = "bear"
+    SIDEWAYS = "sideways"
+    BULL_WEAK = "bull_weak"
+    BEAR_WEAK = "bear_weak"
+    UNCERTAIN = "uncertain"
+
+
 class SentimentPhase(str, Enum):
     EARLY = "early"
     RISING = "rising"
