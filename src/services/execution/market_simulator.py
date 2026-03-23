@@ -295,6 +295,12 @@ class MarketMicrostructureModel:
         6. Handle gap-through for stop orders.
         7. Compute fill delay for limit/stop orders.
         """
+        # Normalize to enums — callers may pass plain strings ("buy"/"sell")
+        if isinstance(side, str) and not isinstance(side, OrderSide):
+            side = OrderSide(side)
+        if isinstance(order_type, str) and not isinstance(order_type, OrderType):
+            order_type = OrderType(order_type)
+
         addv = self._addv.get(ticker, _DEFAULT_ADDV)
         atr  = self._atr.get(ticker, mid_price * _DEFAULT_ATR_PCT)
         tod_label = _classify_time_of_day(current_time) if current_time else "mid_morning"
@@ -454,6 +460,12 @@ class MarketMicrostructureModel:
         current_time: Optional[time] = None,
     ) -> None:
         """Persist a FillResult to the internal ledger."""
+        # Normalize to enums — callers may pass plain strings
+        if isinstance(side, str) and not isinstance(side, OrderSide):
+            side = OrderSide(side)
+        if isinstance(order_type, str) and not isinstance(order_type, OrderType):
+            order_type = OrderType(order_type)
+
         tod_label = _classify_time_of_day(current_time) if current_time else "mid_morning"
         addv = self._addv.get(ticker, _DEFAULT_ADDV)
         atr  = self._atr.get(ticker, 0.0)
